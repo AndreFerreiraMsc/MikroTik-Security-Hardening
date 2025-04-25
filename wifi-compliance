@@ -16,7 +16,7 @@
 # Check if there are any Wi-Fi interfaces present and skip the script if none exist
 :if ($wifiCount = 0) do={
     :put "No Wi-Fi interfaces found. Skipping compliance check."
-    :if ($emailFromAddress) do={
+    :if ([:len $emailFromAddress] > 0) do={
         /tool e-mail send from=$emailFromAddress to=$emailAddress subject=$subject body=("No Wi-Fi interfaces found. Compliance check skipped.") tls=starttls 
     }
     :exit
@@ -107,7 +107,7 @@
     }
   
     # Send email if configured
-    :if ($emailFromAddress) do={
+    :if ([:len $emailFromAddress] > 0) do={
         /tool e-mail send from=$emailFromAddress to=$emailAddress subject=$subject body=$reportBody tls=starttls 
     }
 } else={
