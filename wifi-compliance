@@ -1,0 +1,81 @@
+##   script by Andre Ferreira
+##   created: 2025-04-25
+##   tested on: RouterOS 7.18
+
+
+:local reportLines [:toarray "Compliance actions taken:"]
+:local emailAddress "YOUR_EMAIL@example.com"
+:local subject "Wi-Fi Compliance Changes"
+:local wifiCount [ :len [/interface wifi find] ] 
+
+
+# Check if there are any Wi-Fi interfaces present and skip the script if none exist
+:if ($wifiCount = 0) do={
+    :put "No Wi-Fi interfaces found. Skipping compliance check."
+        :if ([/tool e-mail get address] != "") do={
+        /tool e-mail send to=$emailAddress subject=$subject body=("No Wi-Fi interfaces found. Compliance check skipped.")
+    }
+    :exit
+}
+
+
+# datapath.client-isolation=yes
+#
+# Benefits:
+# - When client-isolation is enabled, wireless clients connected to the same AP cannot communicate with each other as it
+# prevents direct interaction between users, reducing the risk of malicious activity such as snooping or hacking.
+# - It also minimizes the risk of lateral attacks within the same network. If one device is compromised, the attacker 
+# cannot use it to attack other devices on the same network (unless the router itself is compromised).
+#
+# Pitfalls:
+# 1. Client devices will be unable to share resources (such as printers, file servers, or other services within the same 
+# network)
+#
+# Mitigating Pitfalls:
+# - You can disable client-isolation for specific devices in the "Access List". For example, a printer can be made 
+# accessible to all devices on the network, then to secure the access, you can restrict which devices can communicate 
+# with the printer by using firewall rules or consider using VLANs (which reduce the broadcast domain).
+
+:foreach wifiIfIndex in=[/interface wifi find where !datapath.client-isolation or datapath.client-isolation=no] do={
+    /interface wifi set $wifiIfIndex datapath.client-isolation=yes
+    :local name [/interface wifi get $wifiIfIndex name]
+    :set reportLines ($reportLines, "- Enabled datapath.client-isolation on " . $name)
+}
+
+
+# security.wps=disable
+#
+# Benefits:
+# - WPS is commonly enabled by default on routers and can allow an attacker with PHYSICAL access to the router to bypass
+# the need for a password. It has been found vulnerable to brute-force attacks, where attackers try multiple PIN
+# combinations to gain access to a router. Disabling it mitigates these risks.
+#
+# Pitfalls:
+# - WPS simplifies the connection process for non-technical users. By simply pressing a button or entering a PIN, users
+# can easily connect devices to the network.
+# - It can be convenient for devices like printers, but it should not be left on permanently for devices that rarely 
+# require it.
+
+:foreach wifiIfIndex in=[/interface wifi find where !security.wps or security.wps=push-button] do={
+    /interface wifi set $wifiIfIndex security.wps=disable
+    :local name [/interface wifi get $wifiIfIndex name]
+    :set reportLines ($reportLines, "- Disabled WPS on " . $name)
+}
+
+
+# REPORTING
+:if ([:len $reportLines] > 1) do={
+    :local reportBody ""
+    :foreach line in=$reportLines do={
+        :put $line
+        :set reportBody ($reportBody . $line . "\r\n")
+    }
+  
+    # Send email if configured
+    :if ([/tool e-mail get server] != "") do={
+        /tool e-mail send to=$emailAddress subject=$subject body=$reportBody
+    }
+} else={
+    :put "All Wi-Fi settings are compliant."
+}
+
