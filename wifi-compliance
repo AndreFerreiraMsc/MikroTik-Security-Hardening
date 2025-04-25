@@ -1,6 +1,8 @@
 ##   script by Andre Ferreira
 ##   created: 2025-04-25
 ##   tested on: RouterOS 7.18
+##
+##   Copyright (c) 2025 Andre Ferreira
 
 
 :local emailAddress "YOUR_EMAIL@example.com"
