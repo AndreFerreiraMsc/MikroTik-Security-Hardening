@@ -3,23 +3,25 @@
 ##   tested on: RouterOS 7.18
 
 
-:local reportLines [:toarray "Compliance actions taken:"]
 :local emailAddress "YOUR_EMAIL@example.com"
+:local reportLines [:toarray "Compliance actions taken:"]
 :local subject "Wi-Fi Compliance Changes"
-:local wifiCount [ :len [/interface wifi find] ] 
+:local wifiCount [ :len [/interface wifi find] ]
+:local confirmationDelay "250ms"
+:local emailIsConfigured ([/tool e-mail get server] != "" && [/tool e-mail get from] != "")
 
 
 # Check if there are any Wi-Fi interfaces present and skip the script if none exist
 :if ($wifiCount = 0) do={
     :put "No Wi-Fi interfaces found. Skipping compliance check."
-        :if ([/tool e-mail get address] != "") do={
+    :if (emailIsConfigured) do={
         /tool e-mail send to=$emailAddress subject=$subject body=("No Wi-Fi interfaces found. Compliance check skipped.")
     }
     :exit
 }
 
 
-# datapath.client-isolation=yes
+# datapath.client-isolation=yes enforcement
 #
 # Benefits:
 # - When client-isolation is enabled, wireless clients connected to the same AP cannot communicate with each other as it
@@ -36,14 +38,29 @@
 # accessible to all devices on the network, then to secure the access, you can restrict which devices can communicate 
 # with the printer by using firewall rules or consider using VLANs (which reduce the broadcast domain).
 
-:foreach wifiIfIndex in=[/interface wifi find where !datapath.client-isolation or datapath.client-isolation=no] do={
-    /interface wifi set $wifiIfIndex datapath.client-isolation=yes
-    :local name [/interface wifi get $wifiIfIndex name]
-    :set reportLines ($reportLines, "- Enabled datapath.client-isolation on " . $name)
+:foreach wifiIndex in=[/interface wifi find where !datapath.client-isolation or datapath.client-isolation=no] do={
+    :local name [/interface wifi get $wifiIndex name]
+    :local retry 0
+    :local maxRetries 3
+    :local success false
+
+    :while ($retry < $maxRetries and !$success) do={
+        /interface wifi set $wifiIndex datapath.client-isolation=yes
+        :local timestamp [/system clock get time]
+        :delay $confirmationDelay
+        :local newSetting [/interface wifi get $wifiIndex datapath.client-isolation]
+        :if ($newSetting = yes) do={
+            :set reportLines ($reportLines, "- $timestamp Invalid datapath.client-isolation value corrected on $name (attempt $retry/$maxRetries)")
+            :set success true
+        } else {
+            :set reportLines ($reportLines, "- $timestamp FAILED to enable client-isolation on $name after $retry/$maxRetries attempts")
+        }
+        :set retry ($retry + 1)
+    }
 }
 
 
-# security.wps=disable
+# security.wps=disable enforcement
 #
 # Benefits:
 # - WPS is commonly enabled by default on routers and can allow an attacker with PHYSICAL access to the router to bypass
@@ -53,14 +70,30 @@
 # Pitfalls:
 # - WPS simplifies the connection process for non-technical users. By simply pressing a button or entering a PIN, users
 # can easily connect devices to the network.
-# - It can be convenient for devices like printers, but it should not be left on permanently for devices that rarely 
-# require it.
+# - It may be convenient for devices like printers with small screens and no keyboard, but it should not be left on 
+# permanently when only certain devices (rarely) use it.
 
-:foreach wifiIfIndex in=[/interface wifi find where !security.wps or security.wps=push-button] do={
-    /interface wifi set $wifiIfIndex security.wps=disable
-    :local name [/interface wifi get $wifiIfIndex name]
-    :set reportLines ($reportLines, "- Disabled WPS on " . $name)
+:foreach wifiIndex in=[/interface wifi find where !security.wps or security.wps=push-button] do={
+    :local name [/interface wifi get $wifiIndex name]
+    :local retry 0
+    :local maxRetries 3
+    :local success false
+
+    :while ($retry < $maxRetries and !$success) do={
+        /interface wifi set $wifiIndex security.wps=disable
+        :local timestamp [/system clock get time]
+        :delay $confirmationDelay
+        :local newSetting [/interface wifi get $wifiIndex security.wps]
+        :if ($newSetting = "disable") do={
+            :set reportLines ($reportLines, "- $timestamp Invalid security.wps value corrected on $name (attempt $retry/$maxRetries)")
+            :set success true
+        } else {
+            :set reportLines ($reportLines, "- $timestamp FAILED to disable security.wps on $name after $retry/$maxRetries attempts")
+        }
+        :set retry ($retry + 1)
+    }
 }
+
 
 
 # REPORTING
@@ -72,7 +105,7 @@
     }
   
     # Send email if configured
-    :if ([/tool e-mail get server] != "") do={
+    :if ($emailIsConfigured) do={
         /tool e-mail send to=$emailAddress subject=$subject body=$reportBody
     }
 } else={
