@@ -5,19 +5,19 @@
 ##   Copyright (c) 2025 Andre Ferreira
 
 
-:local emailAddress "YOUR_EMAIL@example.com"
+:local emailAddress " emailAddress "YOUR_EMAIL@example.com""
+:local emailFromAddress [/tool e-mail get from]
 :local reportLines [:toarray "Compliance actions taken:"]
 :local subject "Wi-Fi Compliance Changes"
 :local wifiCount [ :len [/interface wifi find] ]
 :local confirmationDelay "250ms"
-:local emailIsConfigured ([/tool e-mail get server] != "" && [/tool e-mail get from] != "")
 
 
 # Check if there are any Wi-Fi interfaces present and skip the script if none exist
 :if ($wifiCount = 0) do={
     :put "No Wi-Fi interfaces found. Skipping compliance check."
     :if (emailIsConfigured) do={
-        /tool e-mail send to=$emailAddress subject=$subject body=("No Wi-Fi interfaces found. Compliance check skipped.")
+        /tool e-mail send from=$emailFromAddress to=$emailAddress subject=$subject body=("No Wi-Fi interfaces found. Compliance check skipped.") tls=starttls 
     }
     :exit
 }
@@ -108,7 +108,7 @@
   
     # Send email if configured
     :if ($emailIsConfigured) do={
-        /tool e-mail send to=$emailAddress subject=$subject body=$reportBody
+        /tool e-mail send from=$emailFromAddress to=$emailAddress subject=$subject body=$reportBody tls=starttls 
     }
 } else={
     :put "All Wi-Fi settings are compliant."
