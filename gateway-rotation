@@ -98,7 +98,7 @@
 :local i 0
 :local subnetTotalLength [:len $subnet]
 
-:while (($i <= $subnetTotalLength) and $isValid) do={
+:while (($i <= $subnetTotalLength) && $isValid) do={
     :local currentCharacter
 
     :if ($i = $subnetTotalLength) do={
@@ -126,7 +126,7 @@
             } else={
                 :local num [:tonum $currentPart]
 
-                :if (($num < 1) or ($num > $maxOctetValue)) do={
+                :if (($num < 1) || ($num > $maxOctetValue)) do={
                     :set validationErrorMessages ( \
                         $validationErrorMessages, \
                         "[Gateway Rotation] Subnet validation: Octet out of range (1-$maxOctetValue): $num" \
@@ -144,7 +144,7 @@
    :set i ($i + 1)
 }
 
-:if ($isValid and ($octetCount != 3)) do={
+:if ($isValid && ($octetCount != 3)) do={
     :set validationErrorMessages ( \
         $validationErrorMessages, \
         "[Gateway Rotation] Subnet validation: expected 3 parts but got ($octetCount + 1)" \
@@ -171,7 +171,7 @@
 :local unit [:pick $wifiReconnectDelay ([:len $wifiReconnectDelay] - 1)]
 :local number [:pick $wifiReconnectDelay 0 ([:len $wifiReconnectDelay] - 1)]
 
-:if (([:typeof [:tonum $number]] != "num") or ($unit != "s" and $unit != "m" and $unit != "h" and $unit != "d")) do={
+:if (([:typeof [:tonum $number]] != "num") || ($unit != "s" && $unit != "m" && $unit != "h" && $unit != "d")) do={
     :set validationErrorMessages ($validationErrorMessages, \
         "Invalid wifiReconnectDelay ($wifiReconnectDelay). Must be like 5s, 10m, etc.")
 }
