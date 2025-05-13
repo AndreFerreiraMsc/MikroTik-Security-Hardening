@@ -220,7 +220,8 @@
         
         :set emailBody ("$emailBody\nPlease correct these issues and try again.")
         
-        /tool e-mail send to=$emailTo from=$emailFrom subject="[Gateway Rotation] Configuration Errors" body=$emailBody
+        /tool e-mail send to=$emailTo from=$emailFrom subject="[Gateway Rotation] Configuration Errors" \
+            body=$emailBody tls=starttls
     }
     
     return
@@ -245,7 +246,8 @@
     :local errorMessage "No interface found for network $subnet.0"
     /log warning $errorMessage
     :if ($emailTo != "" && $emailFrom != "") do={
-        /tool e-mail send to=$emailTo subject="Gateway Swap: Error" body="Script aborted: $errorMessage"
+        /tool e-mail send to=$emailTo subject="Gateway Swap: Error" body="Script aborted: $errorMessage" \
+             tls=starttls
     }
     return
 }
@@ -258,7 +260,8 @@
     :local errorMessage "No bridge found for VLAN $associatedInterface"
     /log warning $errorMessage
     :if ($emailTo != "" && $emailFrom != "") do={
-        /tool e-mail send to=$emailTo subject="Gateway Swap Error" body="Script aborted: $errorMessage"
+        /tool e-mail send to=$emailTo subject="Gateway Swap Error" body="Script aborted: $errorMessage" \
+             tls=starttls
     }
     return
 }
@@ -278,7 +281,8 @@
     :local errorMessage "No Wi-Fi radios found in bridge $bridgeInterface"
     /log warning $errorMessage
     :if ($emailTo != "" && $emailFrom != "") do={
-        /tool e-mail send to=$emailTo subject="Gateway Swap Error" body="Script aborted: $errorMessage"
+        /tool e-mail send to=$emailTo subject="Gateway Swap Error" body="Script aborted: $errorMessage" \
+             tls=starttls
     }
     return
 }
@@ -290,7 +294,8 @@
     :local errorMessage "No DHCP network found for $subnet.0/24 aborting."
     /log warning message=$errorMessage
     :if ($emailTo != "" && $emailFrom != "") do={
-        /tool e-mail send to=$emailTo subject="DHCP Network Missing" body="Script aborted: $errorMessage"
+        /tool e-mail send to=$emailTo subject="DHCP Network Missing" body="Script aborted: $errorMessage" \
+             tls=starttls
     }
     return
 }
@@ -312,7 +317,7 @@
                 "/ip firewall filter add action=accept chain=forward comment=filtering-placeholder disabled=yes\n\n" . \
                 "Note: After creation, you must manually position it further up in your firewall rules.\n\n" . \
                 "The firewall may not work as expected without this rule." \
-            )
+            )  tls=starttls
     }
     return
 }
