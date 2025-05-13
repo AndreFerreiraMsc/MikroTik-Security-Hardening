@@ -1,6 +1,8 @@
 ##
 ## Script by Andre Ferreira
 ## Created: 2025-05-12
+## Updated: 2025-05-13
+## Version: 1.1.1
 ## Tested on: RouterOs 7.18
 ##
 ## Quote
@@ -78,6 +80,24 @@
 :local wifiReconnectDelay "5s"
 # Maximum attempts to generate unique gateway (avoid infinit loops)
 :local maxAttempts 10
+
+
+##################################################
+# Scheduler overrides — used only if globals exist
+##################################################
+
+:if ([:typeof $schedulerSubnet] != "nothing") do={
+    :set subnet $schedulerSubnet
+    /log info "[Gateway Rotation] Scheduler override: subnet = $schedulerSubnet"
+}
+:if ([:typeof $schedulerLow] != "nothing") do={
+    :set low $schedulerLow
+    /log info "[Gateway Rotation] Scheduler override: low = $schedulerLow"
+}
+:if ([:typeof $schedulerHigh] != "nothing") do={
+    :set high $schedulerHigh
+    /log info "[Gateway Rotation] Scheduler override: high = $schedulerHigh"
+}
 
 
 ###################################################
