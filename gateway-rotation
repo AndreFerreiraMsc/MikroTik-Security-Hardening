@@ -1,0 +1,397 @@
+##
+## Script by Andre Ferreira
+## Created: 2025-05-12
+## Tested on: RouterOs 7.18
+##
+## Quote
+## “Know the ground, know the weather; your victory will then be total.” - Sun Tzu, *The Art of War*
+##
+## Purpose:
+## This script provides automated gateway IP rotation for defensive, controlled home IPv4 network environments where
+## frequent reassignment is used as a security tactic or disruption mechanism by reducing the network predictability.
+## It should be scheduled to executed periodically, nonetheless it can also be triggered manually.
+##
+## Key features:
+## - Randomly gateway selection from defined range.
+## - Graceful Wi-Fi client handling with MAC-address based permission restoration
+## - Comprehensive validation and error handling
+## - Firewall rule management for old gateway blocking
+## - Email notifications for critical events
+##
+## Network setup assumptions (requirements):
+## 1- Interfaces:
+## The 'Bridge Port' specifies a VLANID and associates the 'Wi-Fi' interface with the 'Bridge' interface.
+## The 'Bridge' specifies that VLAN filtering is enabled and only admits VLAN tagged traffic.
+## The 'Bridge VLAN' specifies tagged traffic on the 'Bridge' and untagged traffic on the 'Wi-Fi' interface.
+## Wifi interfaces beging with 'wifi'
+##
+## 2- IPv4:
+## 'IP Address' and network are specified for the 'VLAN' interface.
+## The 'IP Pools' used by 'DHCP Servers' DO NOT occupy all available IPS (not /24) as to ensure an interval for the 
+## random generation of the Gateway IP (distinct from client IPs (avoiding colisions))
+## The 'DHCP Server' uses one of those IP pools.
+## The 'DHCP Network' specifies a Gateway IP and perhaps DNS server (if you use one).
+## The 'DHCP Leases' are all dynamic (none hardcoded)
+##
+## 3- Firewall
+## The 'IP Firewall' has placeholders that facilitate the insertion and update of dynamic rules
+##
+##
+## Copyright (c) 2025 Andre Ferreira 
+##
+##
+## This script is licensed under the GNU General Public License, version 3 (GPL-3.0).
+## You can freely modify, distribute, and use this script, under the following conditions:
+##
+## 1. You must keep this copyright notice and the full text of the GPL license.
+## 2. If you modify the script and distribute it, you must inform the original author of the changes made.
+## 3. You may not use the script for proprietary purposes.
+## 
+## For a copy of the GPL-3.0 license, visit https://www.gnu.org/licenses/gpl-3.0.html.
+##
+
+
+/log info message="[Gateway Rotation] Init"
+
+
+###############################################################################
+## CONFIGURATION section
+## All user-configurable parameters are defined here
+###############################################################################
+
+#### Network configuration
+# Base network address (first three octets only)
+:local subnet "192.168.88"
+# Lowest allowable gateway IP (last octet)
+:local low 100
+# Highest allowable gateway IP (last octet)
+:local high 200
+
+#### Notification settings
+:local emailTo "to@example.com"
+:local emailFrom "from@example.com"
+
+#### Operational parameters
+# Whether to use gateway IP as DNS server
+:local dnsServerSameAsGateway false
+# Delay before re-enabling Wi-Fi interfaces
+:local wifiReconnectDelay "5s"
+# Maximum attempts to generate unique gateway (avoid infinit loops)
+:local maxAttempts 10
+
+
+###################################################
+## Validation section
+## Validates all configuration parameters before execution
+################################################### 
+
+:local validationErrorMessages [:toarray ""]
+:local maxOctetValue 254
+:local absMaxAttempts 50
+
+#####
+## Validate subnet (in the absense of regular expressions one does what one can)
+#####
+:local currentPart ""
+:local octetCount 0
+:local isValid true
+:local i 0
+:local subnetTotalLength [:len $subnet]
+
+:while (($i <= $subnetTotalLength) and $isValid) do={
+    :local currentCharacter
+
+    :if ($i = $subnetTotalLength) do={
+        :set currentCharacter "."
+    } else={
+        :set currentCharacter [:pick $subnet $i]
+    } 
+
+   :if ($currentCharacter = ".") do={
+        :set octetCount ($octetCount + 1)
+
+        :if ([:len $currentPart] = 0) do={
+            :set validationErrorMessages ( \
+                $validationErrorMessages, \
+                "[Gateway Rotation] Subnet validation: Empty octet detected" \
+            )
+            :set isValid false
+        } else={
+            :if ([:typeof [:tonum $currentPart]] != "num") do={
+                :set validationErrorMessages ( \
+                    $validationErrorMessages, \
+                    "[Gateway Rotation] Subnet validation: Non-numeric octet '$currentPart'" \
+                )
+                :set isValid false
+            } else={
+                :local num [:tonum $currentPart]
+
+                :if (($num < 1) or ($num > $maxOctetValue)) do={
+                    :set validationErrorMessages ( \
+                        $validationErrorMessages, \
+                        "[Gateway Rotation] Subnet validation: Octet out of range (1-$maxOctetValue): $num" \
+                    )
+                    :set isValid false
+                }
+            }
+        }
+
+        :set currentPart ""
+    } else={
+        :set currentPart ($currentPart . $currentCharacter)
+    } 
+
+   :set i ($i + 1)
+}
+
+:if ($isValid and ($octetCount != 3)) do={
+    :set validationErrorMessages ( \
+        $validationErrorMessages, \
+        "[Gateway Rotation] Subnet validation: expected 3 parts but got ($octetCount + 1)" \
+    )
+}
+
+
+#####
+## Validate IP octet ranges
+#####
+:if ($low < 1 || $low > $maxOctetValue) do={
+    :set validationErrorMessages ($validationErrorMessages, \
+        "Invalid low value ($low). Must be between 1-$maxOctetValue")
+}
+:if ($high < 1 || $high > $maxOctetValue || $high <= $low) do={
+    :set validationErrorMessages ($validationErrorMessages, \
+        "Invalid high value ($high). Must be between 1-$maxOctetValue and > low value ($low)")
+}
+
+
+#####
+## Validate operational parameters
+#####
+:local unit [:pick $wifiReconnectDelay ([:len $wifiReconnectDelay] - 1)]
+:local number [:pick $wifiReconnectDelay 0 ([:len $wifiReconnectDelay] - 1)]
+
+:if (([:typeof [:tonum $number]] != "num") or ($unit != "s" and $unit != "m" and $unit != "h" and $unit != "d")) do={
+    :set validationErrorMessages ($validationErrorMessages, \
+        "Invalid wifiReconnectDelay ($wifiReconnectDelay). Must be like 5s, 10m, etc.")
+}
+
+:if ($maxAttempts < 1 || $maxAttempts > $absMaxAttempts) do={
+    :set validationErrorMessages ($validationErrorMessages, \
+        "Invalid maxAttempts ($maxAttempts). Must be between 1-$absMaxAttempts")
+}
+
+
+#####
+## Validate emails
+#####
+:foreach email in=($emailTo, $emailFrom) do={
+    :local atIndex [:find $email "@"]
+    :local dotIndexAfterAt
+
+    :if ($atIndex != nil) do={
+        :set dotIndexAfterAt [:find $email "." ($atIndex + 1)]
+    }
+
+    :if ($atIndex = nil || $atIndex = 0 || \
+        $dotIndexAfterAt = nil || $dotIndexAfterAt <= ($atIndex +1) || $dotIndexAfterAt >= ([:len $email] - 2) \
+    ) do={
+        :set validationErrorMessages ($validationErrorMessages, "Invalid email address format: $email")
+    }
+
+}
+
+
+# Process any validation errors
+:if ([:len $validationErrorMessages] > 0) do={
+    :local errorCount [:len $validationErrorMessages]
+    /log error "[Gateway Rotation] Validation failed with $errorCount error(s)"
+    
+    :foreach i,errorMsg in=$validationErrorMessages do={
+        /log error "[Gateway Rotation] Validation error $($i + 1): $errorMsg"
+    }
+    
+    :if ($emailTo != "" && $emailFrom) do={
+        :local emailBody "Gateway Rotation script aborted due to $errorCount validation error(s):\n\n"
+        
+        :foreach i,errorMsg in=$validationErrorMessages do={
+            :set emailBody ("$emailBody$($i + 1). $errorMsg\n")
+        }
+        
+        :set emailBody ("$emailBody\nPlease correct these issues and try again.")
+        
+        /tool e-mail send to=$emailTo from=$emailFrom subject="[Gateway Rotation] Configuration Errors" body=$emailBody
+    }
+    
+    return
+}
+
+/log info "[Gateway Rotation] All configuration parameters validated successfully"
+
+
+
+###################################################
+## Main section
+## Where the magic happens
+################################################### 
+
+:local attempts 0
+:local newGateway
+:local acceptedConnectedDevicesList []
+
+# Retrive the subnet associated interface (tested with a VLAN interfaces, see assumptions) 
+:local associatedInterface [/ip address get [find where network="$subnet.0"] interface]
+:if ([:len $associatedInterface] = 0) do={
+    :local errorMessage "No interface found for network $subnet.0"
+    /log warning $errorMessage
+    :if ($emailTo != "" && $emailFrom) do={
+        /tool e-mail send to=$emailTo subject="Gateway Swap: Error" body="Script aborted: $errorMessage"
+    }
+    return
+}
+/log info "Subnet associated interface: $associatedInterface"
+
+
+# Retrieve the bridge associated with the VLAN
+:local bridgeInterface [/interface vlan get $associatedInterface interface]
+:if ([:len $bridgeInterface] = 0) do={
+    :local errorMessage "No bridge found for VLAN $associatedInterface"
+    /log warning $errorMessage
+    :if ($emailTo != "" && $emailFrom) do={
+        /tool e-mail send to=$emailTo subject="Gateway Swap Error" body="Script aborted: $errorMessage"
+    }
+    return
+}
+/log info "Bridge associated with $associatedInterface: $bridgeInterface"
+
+
+# Retrive all Wi-Fi interfaces associated with the bridge (in my case, only 1 per bridge, but...)
+:local wifiRadios []
+:foreach bridgePort in=[/interface bridge port find where bridge=$bridgeInterface] do={
+    :local portWifiInterface [/interface bridge port get $bridgePort interface]
+    :if ([:pick $portWifiInterface 0 4] = "wifi") do={
+        :set wifiRadios ($wifiRadios,$portWifiInterface)
+        /log info "Wi-Fi associated with $bridgeInterface: $portWifiInterface"
+    }
+}
+:if ([:len $wifiRadios] = 0) do={
+    :local errorMessage "No Wi-Fi radios found in bridge $bridgeInterface"
+    /log warning $errorMessage
+    :if ($emailTo != "" && $emailFrom) do={
+        /tool e-mail send to=$emailTo subject="Gateway Swap Error" body="Script aborted: $errorMessage"
+    }
+    return
+}
+
+
+# Ensure there's a DHCP associated with the subnet before continuing
+:local dhcpNetworkHandle [/ip dhcp-server network find where address="$subnet.0/24"]
+:if ($dhcpNetworkHandle = "") do={
+    :local errorMessage "No DHCP network found for $subnet.0/24 aborting."
+    /log warning message=$errorMessage
+    :if ($emailTo != "" && $emailFrom) do={
+        /tool e-mail send to=$emailTo subject="DHCP Network Missing" body="Script aborted: $errorMessage"
+    }
+    return
+}
+:local currentGateway [/ip dhcp-server network get $dhcpNetworkHandle gateway]
+:local currentDns [/ip dhcp-server network get $dhcpNetworkHandle dns-server]
+
+
+# Ensure there's a Firewall place holder in place, allowing for better placement of firewall rules
+:local firewallPlaceholderComment "filtering-placeholder"
+:local firewallPlaceholderFilterHandle [/ip firewall filter find where comment=$firewallPlaceholderComment]
+:if ($firewallPlaceholderFilterHandle = "") do={
+    /log warning message="Warning: Missing firewall rule with comment '$firewallPlaceholderComment'"
+    :if ($emailTo != "" && $emailFrom) do={
+        /tool e-mail send to=$emailTo subject="Firewall Rule Missing" \
+            body=("Firewall placeholder rule missing!\n\n" . \
+                "The firewall rule with comment 'filtering-placeholder' is missing.\n" . \
+                "This placeholder is required for proper rule positioning.\n\n" . \
+                "To create it manually, use:\n" . \
+                "/ip firewall filter add action=accept chain=forward comment=filtering-placeholder disabled=yes\n\n" . \
+                "Note: After creation, you must manually position it further up in your firewall rules.\n\n" . \
+                "The firewall may not work as expected without this rule." \
+            )
+    }
+    return
+}
+
+:local firewallFilterComment "Old gateway $subnet unreachable"
+:local existingFirewallFilterHandle [/ip firewall filter find where comment=$firewallFilterComment]
+
+
+:do {
+    :set newGateway ($subnet . "." . [/rndnum from=$low to=$high])
+    :if ($newGateway = $currentGateway) do={
+        /log info message="Generated IP ($newGateway) matches current gateway ($currentGateway), regenerating..."
+    } else {
+        :set attempts ($attempts + 1)
+        :if ($attempts > $maxAttempts) do={
+            /log error "Failed to generate unique gateway after $maxAttempts attempts"
+            return
+        }
+    }
+} while ($newGateway = $currentGateway)
+
+
+:foreach wifiRadio in=$wifiRadios do={
+    :foreach entryId in=[/interface wifi access-list find where interface=$wifiRadio and action="accept"] do={
+        :set acceptedConnectedDevicesList ($acceptedConnectedDevicesList, [/interface wifi access-list get $entryId mac-address])
+    }
+
+    /interface wifi disable [find where name=$wifiRadio]
+    /interface wifi access-list set [find where interface=$wifiRadio] action=reject
+    /interface wifi registration-table remove [find where interface=$wifiRadio]
+}
+#/ip dhcp-server lease remove [find where address~"$subnet"]
+#/ip arp remove [find where address~"$subnet"]
+
+/ip address set [find where network="$subnet.0"] address=$newGateway
+/ip dhcp-server network set [find address="$subnet.0/24"] gateway=$newGateway
+/log info message="DHCP Gateway set to $newGateway"
+
+:if ($dnsServerSameAsGateway) do={
+    :local allWifiInterfaces [/interface wifi find]
+    :foreach wifiIf in=$allWifiInterfaces do={
+        :local wifiNetwork [/ip address get [find where interface=$wifiIf] network]
+        :if ([:len $wifiNetwork] > 0) do={
+            :local dhcpNetwork [/ip dhcp-server network find where address=$wifiNetwork]
+            :if ([:len $dhcpNetwork] > 0) do={
+                /ip dhcp-server network set $dhcpNetwork dns-server=$newGateway
+                /log info "Updated DNS for Wi-Fi interface $wifiIf to $newGateway"
+            }
+        }
+    }
+}
+
+:if ($existingFirewallFilterHandle != "") do={
+    /ip firewall filter set $existingFirewallFilterHandle dst-address=$currentGateway
+    /log info message=("Updated firewall rule for old gateway to " . $currentGateway)
+} else={
+    /ip firewall filter add chain=forward dst-address=$currentGateway comment=$firewallFilterComment protocol=tcp \
+        action=reject reject-with=tcp-reset place-before=[find where comment=$firewallPlaceholderComment]
+    /ip firewall filter add chain=forward dst-address=$currentGateway comment=$firewallFilterComment protocol=udp \
+        action=reject reject-with=icmp-network-unreachable place-before=[find where comment=$firewallPlaceholderComment]
+    /log info message=("Created new firewall rules to reject traffic to old gateway " . $currentGateway)
+}
+
+:foreach wifiRadio in=$wifiRadios do={
+    /interface wifi enable [find where name=$wifiRadio]
+}
+/delay $wifiReconnectDelay
+
+
+:foreach wifiRadio in=$wifiRadios do={
+    :foreach mac in=$acceptedConnectedDevicesList do={
+        :local entry [/interface wifi access-list find where interface=$wifiRadio and mac-address=$mac]
+        :if ([:len $entry] > 0) do={
+            /interface wifi access-list set $entry action=accept
+            /log info "Restored access for $mac on $wifiRadio"
+        } else={
+            /log warning "Entry not found for $mac on $wifiRadio"
+        }
+    }
+}
+
+/log info message="Gateway Rotation: completed"
