@@ -90,7 +90,7 @@
 :local absMaxAttempts 50
 
 #####
-## Validate subnet (in the absense of regular expressions one does what one can)
+## Validate subnet based on RFC1918 (in the absense of regular expressions one does what one can)
 #####
 :local currentPart ""
 :local octetCount 0
@@ -211,7 +211,7 @@
         /log error "[Gateway Rotation] Validation error $($i + 1): $errorMsg"
     }
     
-    :if ($emailTo != "" && $emailFrom) do={
+    :if ($emailTo != "" && $emailFrom != "") do={
         :local emailBody "Gateway Rotation script aborted due to $errorCount validation error(s):\n\n"
         
         :foreach i,errorMsg in=$validationErrorMessages do={
@@ -244,7 +244,7 @@
 :if ([:len $associatedInterface] = 0) do={
     :local errorMessage "No interface found for network $subnet.0"
     /log warning $errorMessage
-    :if ($emailTo != "" && $emailFrom) do={
+    :if ($emailTo != "" && $emailFrom != "") do={
         /tool e-mail send to=$emailTo subject="Gateway Swap: Error" body="Script aborted: $errorMessage"
     }
     return
@@ -257,7 +257,7 @@
 :if ([:len $bridgeInterface] = 0) do={
     :local errorMessage "No bridge found for VLAN $associatedInterface"
     /log warning $errorMessage
-    :if ($emailTo != "" && $emailFrom) do={
+    :if ($emailTo != "" && $emailFrom != "") do={
         /tool e-mail send to=$emailTo subject="Gateway Swap Error" body="Script aborted: $errorMessage"
     }
     return
@@ -277,7 +277,7 @@
 :if ([:len $wifiRadios] = 0) do={
     :local errorMessage "No Wi-Fi radios found in bridge $bridgeInterface"
     /log warning $errorMessage
-    :if ($emailTo != "" && $emailFrom) do={
+    :if ($emailTo != "" && $emailFrom != "") do={
         /tool e-mail send to=$emailTo subject="Gateway Swap Error" body="Script aborted: $errorMessage"
     }
     return
@@ -289,7 +289,7 @@
 :if ($dhcpNetworkHandle = "") do={
     :local errorMessage "No DHCP network found for $subnet.0/24 aborting."
     /log warning message=$errorMessage
-    :if ($emailTo != "" && $emailFrom) do={
+    :if ($emailTo != "" && $emailFrom != "") do={
         /tool e-mail send to=$emailTo subject="DHCP Network Missing" body="Script aborted: $errorMessage"
     }
     return
@@ -303,7 +303,7 @@
 :local firewallPlaceholderFilterHandle [/ip firewall filter find where comment=$firewallPlaceholderComment]
 :if ($firewallPlaceholderFilterHandle = "") do={
     /log warning message="Warning: Missing firewall rule with comment '$firewallPlaceholderComment'"
-    :if ($emailTo != "" && $emailFrom) do={
+    :if ($emailTo != "" && $emailFrom != "") do={
         /tool e-mail send to=$emailTo subject="Firewall Rule Missing" \
             body=("Firewall placeholder rule missing!\n\n" . \
                 "The firewall rule with comment 'filtering-placeholder' is missing.\n" . \
