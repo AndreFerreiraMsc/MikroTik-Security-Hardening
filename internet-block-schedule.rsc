@@ -28,7 +28,7 @@
 ## For a copy of the GPL-3.0 license, visit https://www.gnu.org/licenses/gpl-3.0.html.
 ##
 
-/system scheduler add name="block-internet" start-time=23:00:00 interval=1d  on-event="/ip firewall filter add chain=forward action=drop comment=night-block place-before=filtering-placeholder"   
+/system scheduler add comment="Block internet access from 11PM" name="block-internet" start-time=23:00:00 interval=1d  on-event="/ip firewall filter add chain=forward action=drop comment=night-block place-before=filtering-placeholder"   
 
-/system scheduler add name="unblock-internet" start-time=08:00:00 interval=1d on-event="/ip firewall filter remove [find comment=night-block]"
+/system scheduler add comment="Unblock internet access from 8AM" name="unblock-internet" start-time=08:00:00 interval=1d on-event="/ip firewall filter remove [find comment=night-block]"
 
