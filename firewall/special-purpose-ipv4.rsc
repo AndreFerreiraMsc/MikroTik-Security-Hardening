@@ -52,7 +52,7 @@ add address=255.255.255.255/32  comment="RFC 919 - Limited Broadcast"           
 
 /ip firewall filter
 add chain=input   src-address-list=not_in_internet action=drop comment="Drop spoofed source" log=yes \
-  log-prefix="Spoofing"
+  log-prefix="Spoofing" in-interface=ether1 
 add chain=forward src-address-list=not_in_internet action=drop comment="Drop spoofed source"  log=yes \
-  log-prefix="Spoofing"
+  log-prefix="Spoofing" in-interface=ether1 
 
