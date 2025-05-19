@@ -28,6 +28,8 @@
 ## For a copy of the GPL-3.0 license, visit https://www.gnu.org/licenses/gpl-3.0.html
 ##
 
+:local ispRouterIp "192.168.1.1"
+
 /ip firewall address-list
 add address=0.0.0.0/8           comment="RFC 791,8190 - This network"                    list=not_in_internet
 add address=10.0.0.0/8          comment="RFC 6890 - Private-Use"                         list=not_in_internet
@@ -49,9 +51,10 @@ add address=224.0.0.0/4         comment="RFC 5771 - Multicast"                  
 add address=240.0.0.0/4         comment="RFC 6890 - Reserved for Future Use"             list=not_in_internet
 add address=255.255.255.255/32  comment="RFC 919 - Limited Broadcast"                    list=not_in_internet
 
-
 /ip firewall filter
-add chain=input   src-address-list=not_in_internet action=drop comment="Drop spoofed source" log=yes \
+add chain=input src-address=$IspRouterIP action=accept comment="Allow traffic from the ISP router" log=no \
+  in-interface=ether1
+add chain=input src-address-list=not_in_internet action=drop comment="Drop spoofed source" log=yes \
   log-prefix="Spoofing" in-interface=ether1 
 add chain=forward src-address-list=not_in_internet action=drop comment="Drop spoofed source"  log=yes \
   log-prefix="Spoofing" in-interface=ether1 
