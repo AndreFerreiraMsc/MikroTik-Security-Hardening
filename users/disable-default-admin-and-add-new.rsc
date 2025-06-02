@@ -94,6 +94,7 @@
 
     :put "======================================================="
     :put "| ATTENTION: Try logging in NOW with user '$username'! |"
+    :put "| In a new browser tab/window (leave this one open)    |"
     :put "| The default 'admin' will be disabled in 5 minutes... |"
     :put "======================================================="
 
