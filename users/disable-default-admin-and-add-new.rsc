@@ -1,7 +1,7 @@
 ##
 ## Script by Andre Ferreira
 ## Created: 2025-06-02
-## Version: 1.0.2
+## Version: 1.0.3
 ## Tested on: RouterOS 7.19
 ##
 ##
@@ -54,30 +54,30 @@
 ## Validates all configuration parameters before execution
 ################################################### 
 :if ( ([:len $username] = 0) || $username = "admin" || ([:len [/user find where name=$username]] > 0) ) do={
-    :error "Invalid username: Must be (1) Non-empty, (2) Not 'admin', (3) Unique"
+    :error "Invalid username: Must be (1) Non-empty, (2) Not 'admin', (3) Unique!"
 }
 
 :if ([:len $password] < 12) do={
-    :error "Password must be >=12 characters. Aborted!"
+    :error "Password must be >=12 characters!"
 }
 
 # Inactivity policy validation
 :if (($inactivityPolicy != "logout") && ($inactivityPolicy != "lockscreen") && ($inactivityPolicy != "none")) do={
-    :error "Invalid inactivity policy. Must be 'logout', 'lockscreen', or 'none'"
+    :error "Invalid inactivity policy. Must be 'logout', 'lockscreen', or 'none'!"
 }
 
 :if ([:len $allowedIPRange] > 18 || [:pick $allowedIPRange 0 7] = "0.0.0.0") do={
-    :error "Overly broad subnet detected: $allowedIPRange"
+    :error "Overly broad subnet detected: $allowedIPRange!"
 }
 
 # Timeout validation
 :if ([:typeof $inactivityTimeout] != "time" || $inactivityTimeout < 5m) do={
-    :error "Invalid timeout. Must be time value ≥5m (e.g., '15m')"
+    :error "Invalid timeout. Must be time value ≥5m (e.g., '15m')!"
 }
 
 # Group validation
 :if ([:len [/user group find name="full"]] = 0) do={
-    :error "Required user group 'full' does not exist. Aborted!"
+    :error "Required user group 'full' does not exist!"
 }
 
 
