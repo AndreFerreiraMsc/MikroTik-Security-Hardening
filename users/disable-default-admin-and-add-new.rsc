@@ -109,7 +109,7 @@
 # Remove this script after execution
 :local scriptName [:jobname]
 :if ([:len [:find [/system script get $scriptName name] ".rsc"]] > 0) do={
-    /system script remove [find name=scriptName]
+    /system script remove [find name=$scriptName]
     /log info ($scriptName . " deleted!")
 }
 
